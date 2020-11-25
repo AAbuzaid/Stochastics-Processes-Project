@@ -1,0 +1,751 @@
+#' ---
+#' title: "Project 1 - AMCS241/STAT250 Stochastic Processes"
+#' author: "Abdullah Issam Abu Zaid"
+#' date: "25 November 2020"
+#' output:
+#'   pdf_document: null
+#'   toc: yes
+#'   highlight: zenburn
+#'   html_document:
+#'     df_print: paged
+#' ---
+#' 
+## ----setup, include=FALSE----------------------------------------------------------------------------------------------------------
+knitr::opts_chunk$set(echo = TRUE)
+
+#' 
+#' 
+#' ***
+#' 
+#' # Problem 1 (Estimation of the mean and covariance function)
+#' 
+#' ## a) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+load('data.RData')
+covid = covid[covid$positive > 0,]
+attach(covid)
+It = positive[2:length(positive)]
+It_1 = positive[1:(length(positive)-1)]
+Log_infection_rate = log(It/It_1)
+detach(covid)
+plot(as.Date(covid$date[2:length(covid$date)]),
+     Log_infection_rate, 
+     cex=0.5, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=3, 
+     xlab="Days", 
+     ylab="r(t)", 
+     main="Log Infection Rate", 
+     ylim=c(0,0.05))
+grid()
+
+
+
+#' Answer: No. Because, by inspection, the mean value function is not constant.
+#' 
+#' ## b) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+rt = Log_infection_rate[2:length(Log_infection_rate)]
+rt_1 = Log_infection_rate[1:(length(Log_infection_rate)-1)]
+Deltar = rt - rt_1
+plot(as.Date(covid$date[1:length(Deltar)]),
+     Deltar, 
+     cex=0.5, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=3, 
+     xlab="Days", 
+     ylab="r(t) - r(t-1)", 
+     main="r(t) - r(t-1)", 
+     ylim=c(-0.01,0.01))
+grid()
+
+
+#' Answer: Yes. The process looks relatively stationary.
+#' 
+#' ## c) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+mean_estimator <- function(x){
+  sum = 0
+  for (i in x){
+    sum = sum + i
+  }
+  return(sum/length(x))
+}
+
+cov_estimator <- function(x, h){
+  m_hat = mean_estimator(x)
+  sum = 0
+  for (i in 1:(length(x)-h)){
+    sum = sum + ((x[i]-m_hat)*(x[i+h]-m_hat))
+  }
+  return(sum/length(x))
+}
+
+cov_h = vector(mode="numeric",30)
+for (h in 1:30){
+  cov_h[h] = cov_estimator(Deltar, h)
+}
+
+cat("Mean estimation: ", mean_estimator(Deltar))
+
+plot(c(0:30), 
+     c(cov_estimator(Deltar, 0), cov_h),
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time Lag (days)", 
+     ylab="covariance", 
+     main="Covariance Estimate",
+     type = "b")
+grid()
+
+attach(covid)
+cases_per_day = positive[2:length(positive)]-positive[1:(length(positive)-1)]
+plot(as.Date(date[1:length(cases_per_day)]),
+     cases_per_day,
+     col="#69b3a2", 
+     lty=1, 
+     xlab="Days", 
+     ylab="Positive Cases", 
+     main="Daily Cases",
+     type = "l",
+     lwd=2)
+detach(covid)
+grid()
+
+
+
+#' Answer: First, the covariance function seems to represent a stationary process with the value of the variance at zero being larger than every other time lag value. Second, the covariance fluctuates between negative and positive values. Third, there seems to be a correlation of the number of positive cases every week or so, this is supported by the plot of the daily cases where there is clearly some weekly periodicity.
+#' 
+#' ## d) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+cov_sum = 0
+for (h in 1:30){
+  cov_sum = cov_sum + cov_h[h]
+}
+variance = cov_estimator(Deltar, 0) + 2*cov_sum
+m_hat = mean_estimator(Deltar)
+upper = m_hat + 1.96*sqrt(variance)/sqrt(length(Deltar))
+lower = m_hat - 1.96*sqrt(variance)/sqrt(length(Deltar))
+cat("Confidence interval:\nLower:",
+    format(lower, digits=4),"\nUpper:", format(upper, digits=4))
+
+
+#' 
+#' ***
+#' 
+#' # Problem 2 (Gaussian Processes)
+#' 
+#' ## a) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+#install.packages("mnormt")
+library(mnormt)
+library(matrixcalc)
+SAMPLES = 200
+
+mu = vector(mode="numeric", SAMPLES)
+sigma = matrix(0, nrow=SAMPLES, ncol=SAMPLES)
+for (row in 1:nrow(sigma)){
+  for (col in 1:ncol(sigma)){
+    sigma[row, col] = exp(-abs(row-col))
+  }
+}
+# Check if sigma matrix is positive definite
+is.positive.definite(sigma, tol=1e-12)
+# Compute Cholesky factor
+L = chol(sigma)
+
+# Simulating
+Z = rmnorm(SAMPLES, 0, 1)
+X = mu + L %*% t(L) %*% Z
+
+plot(X, 
+     cex=0.6, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time", 
+     ylab="value", 
+     main="Gaussian Process",
+     type = "b")
+grid()
+
+
+#' 
+#' ## b) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+X_m_hat = mean_estimator(X)
+
+X_cov_h = vector(mode="numeric", 11)
+for (h in 0:10){
+  X_cov_h[h+1] = cov_estimator(X, h)
+}
+
+X_true_cov = exp(-abs(c(0:10)))
+
+plot(c(0:10), 
+     X_cov_h,
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time Lag (h)", 
+     ylab="value", 
+     main="Covariance",
+     type = "b")
+lines(c(0:10), 
+      X_true_cov,
+      col=rgb(0.8,0.4,0.1,0.7), 
+      pch=19, 
+      lty=1,
+      type = "b")
+legend("topright", 
+       legend = c("Estimated covariance", "True covariance"),
+       col = c("#69b3a2", rgb(0.8,0.4,0.1,0.7)),
+       pch = c(19,19), 
+       bty = "n", 
+       pt.cex = 1.2,
+       text.col = "black")
+grid()
+
+
+#' Answer: As seen from the plot, the estimated covariance somewhat follows the true covariance.
+#' 
+#' ## c) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+mu_c = sqrt(c(1:200))
+Z = rmnorm(SAMPLES, 0, 1)
+X_c = mu_c + L %*% t(L) %*% Z
+plot(X_c, 
+     cex=0.6, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time", 
+     ylab="value", 
+     main="Gaussian Process",
+     type = "b")
+grid()
+
+
+#' 
+#' ## d) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+X_c_m_hat = mean_estimator(X_c)
+
+X_c_cov_h = vector(mode="numeric", 11)
+for (h in 0:10){
+  X_c_cov_h[h+1] = cov_estimator(X_c, h)
+}
+
+X_c_true_cov = exp(-abs(c(0:10)))
+
+plot(X_c_cov_h, 
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time Lag (h)", 
+     ylab="value", 
+     main="Covariance",
+     type = "b",
+     ylim=c(-1,15))
+lines(X_c_true_cov, 
+      cex=1, 
+      col=rgb(0.8,0.4,0.1,0.7), 
+      pch=19, 
+      lty=1,
+      type = "b")
+legend("topright", 
+       legend = c("Estimated covariance", "True covariance"),
+       col = c("#69b3a2", rgb(0.8,0.4,0.1,0.7)),
+       pch = c(19,19), 
+       bty = "n", 
+       pt.cex = 1.2,
+       text.col = "black")
+grid()
+
+
+#' Answer: Because the process is no longer stationary, which means the covariance does not only depend on the time lag.
+#' 
+#' 
+#' 
+#' ## e) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+sp_t = sp[2:length(sp)]
+sp_t_1 = sp[1:length(sp)-1]
+log_returns = log(sp_t/sp_t_1)
+
+plot(sp, 
+     cex=0.5, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Days", 
+     ylab="value", 
+     main="S&P Index")
+grid()
+plot(log_returns, 
+     cex=0.5, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Days", 
+     ylab="value", 
+     main="Log-Returns")
+grid()
+
+
+#' Answer: Because as can be seen from the original data plot, the process is not stationary. While the plot of the log returns mostly resembles a stationary process, and thus can be modeled with a stationary Gaussian process.
+#' 
+#' 
+#' ## f) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+a.hat     <- 0.4
+sigma.hat <- 0.02
+SAMPLES_R = 252
+
+sigma_R = matrix(0, nrow=SAMPLES_R, ncol=SAMPLES_R)
+for (row in 1:nrow(sigma_R)){
+  for (col in 1:ncol(sigma_R)){
+    sigma_R[row, col] = (sigma.hat^2/(1-a.hat^2))*(-a.hat)^(abs(row-col))
+  }
+}
+
+sigma_aa = sigma_R[2:249, 2:249]
+sigma_ab = sigma_R[2:249, 250:252]
+sigma_ba = sigma_R[250:252, 2:249]
+sigma_bb = sigma_R[250:252, 250:252]
+
+mu_b_given_a = sigma_ba %*% matrix.inverse(sigma_aa) %*% matrix(log_returns)
+sigma_b_given_a = sigma_bb - sigma_ba %*% matrix.inverse(sigma_aa) %*% sigma_ab
+
+cat("Variable   Mean     Variance", 
+    "\nR250: ", mu_b_given_a[1], diag(sigma_b_given_a)[1],
+    "\nR251:  ", mu_b_given_a[2],"", diag(sigma_b_given_a)[2],
+    "\nR252: ", mu_b_given_a[3], diag(sigma_b_given_a)[3])
+
+
+#' 
+#' ***
+#' 
+#' # Problem 3 (Periodogram and filtering)
+#' 
+#' ## a) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+w = seq(-0.5, 0.5, 0.01)
+
+X_w = vector(mode="numeric", length(w))
+
+for (k in 1:length(w)){
+  sum = 0
+  for (t in 1:length(X)){
+    sum = sum + X[t]*exp(-pi*w[k]*(t-1)*2i)
+  }
+  X_w[k] = sum
+}
+
+R_w = (1/length(X))*abs(X_w)^2
+R_Orn_Uhn = 2/(1+(2*pi*w)^2)
+
+plot(w,
+     R_w,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Frequency (Hz)", 
+     ylab="Power/Hz", 
+     main="Periodogram",
+     type="l",
+     lwd=2)
+lines(w,
+     R_Orn_Uhn, 
+     cex=1, 
+     col=rgb(0.8,0.4,0.1,0.7), 
+     pch=19, 
+     lty=1, 
+     type="l",
+     lwd=2)
+legend("topright", 
+       legend = c("Estimated periodogram", "True periodogram"),
+       col = c("#69b3a2", rgb(0.8,0.4,0.1,0.7)),
+       pch = c(19,19), 
+       bty = "n", 
+       pt.cex = 1.2,
+       text.col = "black")
+
+
+#' Answer: The estimated periodogram has a rough shape with high variance, but there is some resemblance of the Ornstein-Uhlenbeck spectral density.
+#' 
+#' ## b) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+SAMPLES = 1000
+
+mu = vector(mode="numeric", SAMPLES)
+sigma = matrix(0, nrow=SAMPLES, ncol=SAMPLES)
+for (row in 1:nrow(sigma)){
+  for (col in 1:ncol(sigma)){
+    sigma[row, col] = exp(-abs(row-col))
+  }
+}
+
+# Compute Cholesky factor
+L = chol(sigma)
+
+# Simulating
+Z = rmnorm(SAMPLES, 0, 1)
+Xb = mu + L %*% t(L) %*% Z
+
+w = seq(-0.5, 0.5, 0.01)
+Xb_w = vector(mode="numeric", length(w))
+
+for (k in 1:length(w)){
+  sum = 0
+  for (t in 1:length(Xb)){
+    sum = sum + Xb[t]*exp(-pi*w[k]*(t-1)*2i)
+  }
+  Xb_w[k] = sum
+}
+
+Rb_w = (1/length(Xb))*abs(Xb_w)^2
+
+plot(w,
+     Rb_w,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Frequency (Hz)", 
+     ylab="Power/Hz", 
+     main="Periodogram",
+     type="l",
+     lwd=2)
+lines(w,
+     R_Orn_Uhn, 
+     cex=1, 
+     col=rgb(0.8,0.4,0.1,0.7), 
+     pch=19, 
+     lty=1, 
+     type="l",
+     lwd=2)
+legend("topright", 
+       legend = c("Estimated periodogram", "True periodogram"),
+       col = c("#69b3a2", rgb(0.8,0.4,0.1,0.7)),
+       pch = c(19,19), 
+       bty = "n", 
+       pt.cex = 1.2,
+       text.col = "black")
+
+
+#' Answer: The estimation does not improve because the approximation equation used $\hat{R}(w)=\frac{1}{N}|\tilde{X}(w)|^2$ is not a consistent estimator of $\hat{R}(w)$. Which means that $V(\hat{R}(w))$ does not approach zero as $N$ increases.
+#' 
+#' ## c)
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+w = seq(0, 50, 0.01)
+d = 1/100
+Xeeg_w = vector(mode="numeric", length(w))
+
+for (j in 1:length(w)){
+  sum = 0
+  for (k in 1:length(eeg)){
+    sum = sum + eeg[k]*exp(-pi*w[j]*d*(k-1)*2i)
+  }
+  Xeeg_w[j] = sum
+}
+
+Reeg_w = (d/length(X))*abs(Xeeg_w)^2
+
+plot(w,
+     Reeg_w,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Frequency (Hz)", 
+     ylab="Power/Hz", 
+     main="Periodogram",
+     type="l",
+     lwd=2)
+
+
+#' 
+#' 
+#' ## d) 
+## ----message=FALSE-----------------------------------------------------------------------------------------------------------------
+#install.packages("bspec")
+library(bspec)
+welsh = welchPSD(ts(eeg, frequency = 100), seglength = 4)
+#plot(welsh$frequency, welsh$power, type = 'l')
+
+
+trapz_area <- function(fun, startf, endf){
+  area = 0
+  start = startf*4+1
+  end = endf*4+1
+  for (i in c(start:(end-1))){
+    x1 = i
+    x2 = i+1
+    max_y = max(fun[x1], fun[x2])
+    min_y = min(fun[x1], fun[x2])
+    area = area + (x2-x1)*min_y + 1/2*(x2-x1)*(max_y-min_y)
+  }
+  return(area)
+}
+
+Darea = trapz_area(welsh$power, 0.5, 4)
+Tarea = trapz_area(welsh$power, 4, 8)
+Aarea = trapz_area(welsh$power, 8, 12)
+Barea = trapz_area(welsh$power, 12, 30)
+
+cat("Delta power(0.5-4Hz):", Darea, "\nTheta power(4-8Hz):", Tarea,
+    "\nAlpha power(8-12Hz):", Aarea, "\nBeta power(12-30Hz):", Barea)
+plot(welsh$frequency[1:121], welsh$power[1:121], type = 'l',
+     main="Periodogram", xlab="Frequency (Hz)", ylab="Power/Hz")
+polygon(c(min(welsh$frequency[3:17]), welsh$frequency[3:17], 
+          max(welsh$frequency[3:17])),
+        c(0, welsh$power[3:17], 0),
+        col=rgb(0.2,0.1,0.5,0.2),
+        border=F)
+polygon(c(min(welsh$frequency[17:33]), welsh$frequency[17:33], 
+          max(welsh$frequency[17:33])),
+        c(0, welsh$power[17:33], 0),
+        col=rgb(0.8,0.4,0.1,0.5),
+        border=F)
+polygon(c(min(welsh$frequency[33:49]), welsh$frequency[33:49], 
+          max(welsh$frequency[33:49])),
+        c(0, welsh$power[33:49], 0),
+        col=rgb(0,0.4,0.8,0.5),
+        border=F)
+polygon(c(min(welsh$frequency[49:121]), welsh$frequency[49:121], 
+          max(welsh$frequency[49:121])),
+        c(0, welsh$power[49:121], 0),
+        col=rgb(0.8,0.4,0.1,0.8),
+        border=F)
+
+
+#' Answer: As can be seen from the computed powers of the bands, the person was asleep, probably in deep sleep. This is because the delta band has much higher power than the other bands, which is also evident from the given plot.
+#' 
+#' 
+#' ## e)
+#' Answer: $$h(t) = \int\exp(i 2 \pi \omega t) H(\omega) d \omega  = \int_{a}^{b}\exp(i 2 \pi\omega t) d\omega +\int_{-b}^{-a}\exp(i 2 \pi\omega t) d\omega =$$
+#' $$\left. \frac{exp(i 2 \pi\omega t)}{i 2 \pi t} \right|_{a}^{b} +\left. \frac{exp(i 2 \pi\omega t)}{i 2 \pi t} \right|_{-b}^{-a}=\frac{exp(i 2 \pi b t)-exp(i 2 \pi a t)}{i 2 \pi t}+\frac{exp(-i 2 \pi a t)-exp(-i 2 \pi b t)}{i 2 \pi t}$$
+#' $$\frac{exp(i 2 \pi b t)-exp(-i 2 \pi b t)-(exp(i 2 \pi a t)-exp(-i 2 \pi a t))}{i 2 \pi t}=\frac{\sin(2 \pi b t)-\sin(2 \pi a t)}{\pi t}$$
+#' Where $$\sin(x)=\frac{exp(ix)-exp(-ix)}{2i}$$ was used.
+#' 
+#' ## f) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+ht <- function(a, b, t){
+  if (t==0){
+    return(2*(b-a))
+    }
+  else{
+    return((sin(2*pi*t*b)-sin(2*pi*t*a))/(pi*t))
+    }
+}
+
+d = 1/100
+LX_delta = vector(mode="numeric", length(eeg))
+for (t in c(1:length(eeg))){
+  for (i in c(1:t))
+  LX_delta[t] = LX_delta[t] + ht(0.5, 4, d*(i-1))*eeg[t-(i-1)]*d
+}
+
+LX_theta = vector(mode="numeric", length(eeg))
+for (t in c(1:length(eeg))){
+  for (i in c(1:t))
+  LX_theta[t] = LX_theta[t] + ht(4, 8, d*(i-1))*eeg[t-(i-1)]*d
+}
+
+LX_alpha = vector(mode="numeric", length(eeg))
+for (t in c(1:length(eeg))){
+  for (i in c(1:t))
+  LX_alpha[t] = LX_alpha[t] + ht(8, 12, d*(i-1))*eeg[t-(i-1)]*d
+}
+
+LX_beta = vector(mode="numeric", length(eeg))
+for (t in c(1:length(eeg))){
+  for (i in c(1:t))
+  LX_beta[t] = LX_beta[t] + ht(12, 30, d*(i-1))*eeg[t-(i-1)]*d
+}
+
+plot(c(0:(length(eeg)-1))*0.01,
+     LX_delta,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time (s)", 
+     ylab="Voltage", 
+     main="Delta",
+     type="l",
+     lwd=1.5)
+
+plot(c(0:(length(eeg)-1))*0.01,
+     LX_theta,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time (s)", 
+     ylab="Voltage", 
+     main="Theta",
+     type="l",
+     lwd=1.5)
+
+plot(c(0:(length(eeg)-1))*0.01,
+     LX_alpha,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time (s)", 
+     ylab="Voltage", 
+     main="Alpha",
+     type="l",
+     lwd=1.5)
+
+plot(c(0:(length(eeg)-1))*0.01,
+     LX_beta,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Time (s)", 
+     ylab="Voltage",
+     main="Beta",
+     type="l",
+     lwd=1.5)
+
+plot(c(0:399)*0.01, LX_delta[801:1200]-40, type="l", col="#7b0290",
+     ylim=c(-60,60), xlim=c(-50,400)*0.01,
+     xaxt="n", yaxt="n", axes=FALSE, ann=TRUE, xlab="", ylab="",
+     lwd=2, main="Decomposed EEG signal (4 Seconds)")
+text(c(0,0,0,0),c(-40,-10,20,50),
+     c("Delta","Theta","Alpha","Beta "), adj=1.2, font=2)
+text(c(0,0,0,0),c(-49,-19,11,41),
+     c("[0.5-4 Hz] ","[4-8 Hz]  ","[8-12 Hz]  ","[12-30 Hz]"), adj=0.9, font=1)
+lines(c(0:399)*0.01, LX_theta[801:1200]-10, type="l", col="#7b0290", lwd=2)
+lines(c(0:399)*0.01, LX_alpha[801:1200]+20, type="l", col="#7b0290", lwd=2)
+lines(c(0:399)*0.01, LX_beta[801:1200]+50, type="l", col="#7b0290", lwd=2)
+
+
+#' 
+#' 
+#' ***
+#' 
+#' # Problem 4 (Simulation of Markov Chain)
+#' 
+#' ## a) 
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+attach(samba)
+
+mu_hat=1/mean_estimator(processing_time)
+
+lambda_hat=1/mean_estimator(customer[2:length(customer)]-customer[1:(length(customer)-1)])
+
+detach(samba)
+
+cat("mu_hat:", mu_hat, "\nlambda_hat:", lambda_hat)
+
+
+#' 
+#' ## b)
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+samples = 100000
+
+sim_processing_time = rexp(samples, mu_hat)
+
+sim_arrival_time = vector(mode="numeric", samples)
+sim_arrival_time[1] = rexp(1, lambda_hat)
+for (i in c(2:samples)){
+  sim_arrival_time[i] = sim_arrival_time[i-1] + rexp(1, lambda_hat)
+}
+
+waiting_time = vector(mode="numeric", samples)
+waiting_time[1] = 0
+finish_time = sim_arrival_time[1] + sim_processing_time[1]
+for (i in c(2:samples)){
+  if (sim_arrival_time[i] < finish_time){
+    waiting_time[i] = finish_time - sim_arrival_time[i]
+    finish_time = finish_time + sim_processing_time[i]
+  }
+  else{
+    waiting_time[i] = 0
+    finish_time = sim_arrival_time[i] + sim_processing_time[i]
+  }
+}
+
+plot(waiting_time,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Customer", 
+     ylab="Waiting Time (min)", 
+     main="Waiting Times",
+     type="l",
+     lwd=1.5)
+hist(waiting_time,
+     breaks=30,
+     col="#69b3a2",
+     main="Histogram of Waiting Times",
+     xlab="Time (min)")
+
+WT_mean = mean_estimator(waiting_time)
+cat("Average waiting time:", WT_mean, "minutes")
+
+
+#' Answer: From the histogram plotted, the waiting time of the customers seems to follow an exponential distribution.
+#' 
+#' ## c)
+## ----------------------------------------------------------------------------------------------------------------------------------
+
+finish_time_c = vector(mode="numeric", 4)
+waiting_time_c = vector(mode="numeric", samples)
+
+for (i in c(1:samples)){
+  idx = which.min(finish_time_c)
+  if (sim_arrival_time[i] < min(finish_time_c)){
+    waiting_time_c[i] = finish_time_c[idx] - sim_arrival_time[i]
+    finish_time_c[idx] = finish_time_c[idx] + sim_processing_time[i]
+  }
+  else{
+    waiting_time_c[i] = 0
+    finish_time_c[idx] = sim_arrival_time[i] + sim_processing_time[i]
+  }
+}
+
+plot(waiting_time_c,
+     cex=1, 
+     col="#69b3a2", 
+     pch=19, 
+     lty=1, 
+     xlab="Customer", 
+     ylab="Waiting Time (min)", 
+     main="Waiting Times",
+     type="l",
+     lwd=1.5)
+hist(waiting_time_c,
+     breaks=30,
+     col="#69b3a2",
+     main="Histogram of Waiting Times",
+     xlab="Time (min)")
+
+WT_mean_c = mean_estimator(waiting_time_c)
+cat("Average waiting time:", WT_mean_c, "minutes")
+
